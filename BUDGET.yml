@@ -1,0 +1,43 @@
+# Economic Governance Protocol - Budget Configuration
+# AGENTS.md v5.0準拠
+
+# 月次予算 (USD)
+monthly_budget_usd: 100
+
+# コストしきい値
+thresholds:
+  # 警告レベル: 予算の80%に達したら警告Issue作成
+  warning: 0.8
+
+  # 緊急レベル: 予算の150%に達したらサーキットブレーカー作動
+  emergency: 1.5
+
+# サービス別予算配分 (参考値)
+service_budgets:
+  anthropic_api: 80  # Claude API使用料
+  firebase: 15       # Firebase/GCP費用
+  github_actions: 5  # GitHub Actions超過分（通常無料枠内）
+
+# 緊急時アクション
+emergency_actions:
+  # サーキットブレーカー作動時に自動無効化するワークフロー
+  disable_workflows:
+    - autonomous-agent.yml
+    - state-machine.yml
+    - economic-circuit-breaker.yml  # 自身も停止して無限ループ防止
+
+# コスト監視設定
+monitoring:
+  # チェック頻度: 1時間ごと (workflow scheduleで設定)
+  check_interval_hours: 1
+
+  # メトリクス保存先
+  metrics_directory: .ai/metrics/cost-history
+
+  # アラート通知先
+  alert_assignee: repository_owner
+
+# 備考
+# - Anthropic APIの実際の請求額は月末まで確定しないため、推定値を使用
+# - Firebase/GCPコストはCloud Billing API統合時に正確な値を取得可能
+# - GitHub Actionsは月間3000分まで無料（パブリックリポジトリ）
