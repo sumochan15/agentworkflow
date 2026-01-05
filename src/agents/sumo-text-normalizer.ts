@@ -27,7 +27,7 @@ export class SumoTextNormalizer {
     private cachePath: string;
     private openai: OpenAI;
 
-    constructor() {
+    constructor(apiKey?: string) {
         // srcディレクトリから読み込む（distディレクトリにはJSONがコピーされないため）
         const projectRoot = path.join(__dirname, '../..');
         const dictionaryPath = path.join(projectRoot, 'src/data/sumo-dictionary.json');
@@ -47,8 +47,8 @@ export class SumoTextNormalizer {
             : path.join(projectRoot, 'src/data/wrestler-cache.json');
         this.wrestlerCache = this.loadCache();
 
-        // OpenAI クライアント初期化
-        this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        // OpenAI クライアント初期化（渡されたAPIキーを優先、なければ環境変数）
+        this.openai = new OpenAI({ apiKey: apiKey || process.env.OPENAI_API_KEY });
     }
 
     /**

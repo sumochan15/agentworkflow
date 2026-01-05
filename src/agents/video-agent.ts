@@ -90,7 +90,7 @@ export class VideoAgent {
         this.referenceImagePath = options?.referenceImagePath;
         this.bgmPath = options?.bgmPath;
         this.progressCallback = options?.progressCallback;
-        this.textNormalizer = new SumoTextNormalizer();
+        this.textNormalizer = new SumoTextNormalizer(apiKeys.openai);
     }
 
     /**
