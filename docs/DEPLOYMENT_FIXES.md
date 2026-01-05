@@ -488,7 +488,207 @@ UPSTASH_REDIS_REST_TOKEN=your-token
 
 ---
 
+---
+
+### 11. Vercel環境での25%ハング問題（verifyWrestlerReadings）
+
+**日時**: 2026-01-06
+
+**問題**:
+- 25%で進行が止まる（Vercel環境のみ）
+- `verifyWrestlerReadings()` がOpenAI API呼び出し + 相撲協会サイトスクレイピングでハング
+
+**原因**:
+- タイムアウト付きでも、実際にはタイムアウトしていなかった
+- Vercel環境では外部API呼び出しが予期せぬ遅延を引き起こす
+
+**解決策**:
+- Vercel環境では `verifyWrestlerReadings()` を**完全にスキップ**
+- ローカル環境のみ実行（2分タイムアウト付き）
+
+```typescript
+const isProduction = process.env.VERCEL || process.env.NODE_ENV === 'production';
+
+if (!isProduction) {
+    // ローカル環境のみ実行
+    await this.verifyWrestlerReadings(scenario);
+} else {
+    // Vercel環境では完全にスキップ
+    console.warn('⚠️  Vercel環境: 力士名の確認をスキップ');
+}
+```
+
+**変更ファイル**:
+- `src/agents/video-agent.ts`
+
+---
+
+### 12. OpenAI API Key受け渡し問題（SumoTextNormalizer）
+
+**日時**: 2026-01-06
+
+**問題**:
+```
+The OPENAI_API_KEY environment variable is missing or empty
+```
+
+**原因**:
+- `SumoTextNormalizer` が `process.env.OPENAI_API_KEY` のみ使用
+- Webアプリではユーザーがフォームで入力したAPI Keyが渡されない
+
+**解決策**:
+- `SumoTextNormalizer` のconstructorに `apiKey` パラメータを追加
+- `VideoAgent` から `apiKeys.openai` を渡す
+
+```typescript
+// SumoTextNormalizer
+constructor(apiKey?: string) {
+    this.openai = new OpenAI({ apiKey: apiKey || process.env.OPENAI_API_KEY });
+}
+
+// VideoAgent
+this.textNormalizer = new SumoTextNormalizer(apiKeys.openai);
+```
+
+**変更ファイル**:
+- `src/agents/sumo-text-normalizer.ts`
+- `src/agents/video-agent.ts`
+
+---
+
+### 13. レファレンス画像の30%ハング問題
+
+**日時**: 2026-01-06
+
+**問題**:
+- 30%（画像生成）で止まる
+- `fs.readFileSync()` が `.claude/agents/ref_image/sumo_yohei.png` で失敗
+
+**原因**:
+- Vercel環境に `.claude/agents/ref_image/` ディレクトリが存在しない
+
+**解決策**:
+1. `public/ref_image/sumo_yohei.png` にコピー（Vercelデプロイに含まれる）
+2. 複数パスを試行して、レファレンス画像を必ず読み込む
+
+```typescript
+const possiblePaths = [
+    path.join(process.cwd(), 'public/ref_image/sumo_yohei.png'),  // Vercel
+    path.join(process.cwd(), '.claude/agents/ref_image/sumo_yohei.png'),  // Local
+];
+
+for (const refPath of possiblePaths) {
+    if (fs.existsSync(refPath)) {
+        refImageBase64 = fs.readFileSync(refPath).toString('base64');
+        break;
+    }
+}
+```
+
+**変更ファイル**:
+- `src/agents/video-agent.ts`
+- `public/ref_image/sumo_yohei.png` (新規追加)
+
+---
+
+### 14. Vercel関数のfire-and-forget問題 ⚠️ **最重要**
+
+**日時**: 2026-01-06
+
+**問題**:
+- 動画生成が実際には実行されていない
+- Redisには "processing" と記録されるが、進行しない
+
+**原因**:
+- Vercelのサーバーレス関数は、**HTTPレスポンスを返すとすぐに終了**
+- `generateVideo()` をfire-and-forgetで実行していたが、関数終了で中断されていた
+
+**解決策**:
+- `generateVideo()` を **await** して、完了まで関数を実行し続ける
+- ユーザーは Progress Tracker でリアルタイム進行状況を確認
+
+```typescript
+// 修正前: Fire and forget
+generateVideo({...}).catch(...);
+return NextResponse.json({ jobId, status: 'pending' });
+
+// 修正後: Await for completion
+await generateVideo({...});
+return NextResponse.json({ jobId, status: 'completed' });
+```
+
+**変更ファイル**:
+- `app/api/video/generate/route.ts`
+
+**影響**:
+- ユーザーは完了までレスポンスを待つ（最大13分）
+- Progress Trackerでリアルタイム進行状況を確認可能
+
+---
+
+### 15. Gemini API responseModalities設定
+
+**日時**: 2026-01-06
+
+**問題**:
+- 画像生成APIが応答しない可能性
+
+**解決策**:
+- `responseModalities` に `["TEXT", "IMAGE"]` を指定（公式推奨）
+
+```typescript
+generationConfig: {
+    responseModalities: ["TEXT", "IMAGE"],  // 両方含める
+    imageConfig: {
+        aspectRatio: "9:16",
+        imageSize: "2K"
+    }
+}
+```
+
+**変更ファイル**:
+- `src/agents/video-agent.ts`
+
+---
+
+### 16. FFmpeg ENOENT エラー ❌ **未解決**
+
+**日時**: 2026-01-06
+
+**問題**:
+```
+spawn /ROOT/node_modules/ffmpeg-static/ffmpeg ENOENT
+```
+
+**原因**:
+- Vercel環境で `ffmpeg-static` のバイナリパスが正しく解決されない
+- `/ROOT/node_modules/...` という異常なパス
+
+**試行した解決策**:
+1. ✅ `ffmpeg-static` パッケージインストール済み
+2. ✅ `vercel.json` でメモリ3008MB設定済み
+3. ✅ 詳細ログとフォールバックパス検索を追加
+4. ❌ webpack設定（Turbopackと競合）
+5. ❌ バイナリが依然として見つからない
+
+**現在の状態**:
+- 80%（動画組み立て）で停止
+- FFmpegバイナリが実行できない
+
+**変更ファイル**:
+- `src/agents/video-agent.ts` (詳細ログ追加)
+- `next.config.ts` (Turbopack設定)
+- `vercel.json` (メモリ設定)
+
+**次のステップ**:
+- Vercel公式サンプル ([vercel-labs/ffmpeg-on-vercel](https://github.com/vercel-labs/ffmpeg-on-vercel)) の実装を詳細に調査
+- または、別のホスティングサービス（Railway, Renderなど）への移行を検討
+- または、ローカル実行を推奨（`/create-sumo-video` コマンド）
+
+---
+
 ## 更新履歴
 
+- 2026-01-06 (v3): Vercel環境での動画生成問題を調査・修正（修正#11-16）、FFmpegエラーは未解決
 - 2026-01-06 (v2): SumoTextNormalizerハング問題を修正（修正#10）
 - 2026-01-06 (v1): 初版作成（全9件の修正を記録）
