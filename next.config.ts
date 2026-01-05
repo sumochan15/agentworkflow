@@ -8,6 +8,9 @@ const config: NextConfig = {
   },
   // Force Node.js runtime (not Edge) for FFmpeg compatibility
   // Vercel will use Node.js runtime by default for API routes
+
+  // Enable Turbopack explicitly (Next.js 15 default)
+  turbopack: {},
 };
 
 export default config;

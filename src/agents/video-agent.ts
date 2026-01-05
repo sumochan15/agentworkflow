@@ -7,8 +7,35 @@ import axios from 'axios';
 import dotenv from 'dotenv';
 
 // Configure ffmpeg to use the static binary
+console.log('🔧 FFmpeg configuration:', {
+    ffmpegStaticPath: ffmpegStatic,
+    exists: ffmpegStatic && fs.existsSync(ffmpegStatic),
+    cwd: process.cwd(),
+    env: process.env.VERCEL ? 'Vercel' : 'Local'
+});
+
 if (ffmpegStatic) {
-    ffmpeg.setFfmpegPath(ffmpegStatic);
+    // Verify the binary exists before setting
+    if (fs.existsSync(ffmpegStatic)) {
+        ffmpeg.setFfmpegPath(ffmpegStatic);
+        console.log('✅ FFmpeg path set successfully:', ffmpegStatic);
+    } else {
+        console.error('❌ FFmpeg binary not found at:', ffmpegStatic);
+        // Try to find it in common locations
+        const possiblePaths = [
+            path.join(process.cwd(), 'node_modules', 'ffmpeg-static', 'ffmpeg'),
+            path.join(process.cwd(), 'node_modules', '.bin', 'ffmpeg'),
+        ];
+        for (const tryPath of possiblePaths) {
+            if (fs.existsSync(tryPath)) {
+                console.log('✅ Found FFmpeg at alternative path:', tryPath);
+                ffmpeg.setFfmpegPath(tryPath);
+                break;
+            }
+        }
+    }
+} else {
+    console.warn('⚠️  ffmpeg-static module returned null/undefined');
 }
 import { promisify } from 'util';
 import { fileURLToPath } from 'url';
@@ -250,7 +277,7 @@ export class VideoAgent {
                             parts: parts
                         }],
                         generationConfig: {
-                            responseModalities: ["IMAGE"],
+                            responseModalities: ["TEXT", "IMAGE"],  // 両方含める
                             imageConfig: {
                                 aspectRatio: "9:16",  // 縦型
                                 imageSize: "2K"
@@ -284,7 +311,16 @@ export class VideoAgent {
                 console.log(`    ✓ 生成完了 (${(buffer.length / 1024).toFixed(1)}KB)`);
 
             } catch (e: any) {
-                console.error(`  ! Nano Banana Pro エラー:`, e.response?.data || e.message);
+                console.error(`  ! Nano Banana Pro エラー (シーン ${i + 1}):`, {
+                    message: e.message,
+                    status: e.response?.status,
+                    statusText: e.response?.statusText,
+                    data: e.response?.data,
+                    config: {
+                        url: e.config?.url,
+                        method: e.config?.method,
+                    }
+                });
                 throw e;
             }
         }
