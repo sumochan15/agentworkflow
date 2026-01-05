@@ -274,19 +274,31 @@ if (ffmpegStatic) {
 
 **解決策**:
 
-1. **VideoAgent**: 15秒タイムアウトを追加し、失敗しても続行
+1. **VideoAgent**: 環境別タイムアウト設定
+   - **ローカル環境**: 2分のタイムアウト、エラー時は処理停止（デバッグ可能）
+   - **Vercel環境**: 15秒でタイムアウトしてスキップ、動画生成は継続
+
 ```typescript
-// 力士名の読み仮名を事前確認（タイムアウト付き）
+// 力士名の読み仮名を事前確認
+const isProduction = process.env.VERCEL || process.env.NODE_ENV === 'production';
+const timeout = isProduction ? 15000 : 120000; // 本番15秒、ローカル2分
+
 try {
     await Promise.race([
         this.verifyWrestlerReadings(scenario),
         new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Wrestler verification timeout')), 15000)
+            setTimeout(() => reject(new Error('Wrestler verification timeout')), timeout)
         )
     ]);
 } catch (error: any) {
-    console.warn('⚠️  力士名の確認をスキップ:', error.message);
-    // 力士名の確認に失敗しても続行する（動画生成には必須ではない）
+    if (isProduction) {
+        // 本番環境ではスキップして続行
+        console.warn('⚠️  力士名の確認をスキップ:', error.message);
+    } else {
+        // ローカル環境ではエラーとして扱う
+        console.error('❌ 力士名の確認に失敗しました:', error.message);
+        throw error;
+    }
 }
 ```
 
@@ -314,9 +326,10 @@ constructor() {
 - `src/agents/sumo-text-normalizer.ts`
 
 **効果**:
-- 力士名確認に失敗しても動画生成が継続
+- **ローカル**: 相撲協会サイトから正確な力士名を取得（最大2分）
+- **Vercel**: 15秒でタイムアウトしてスキップ、動画生成は継続
 - Vercel環境でのファイルシステムエラーを回避
-- 最大15秒でタイムアウトして次のステップへ進む
+- 環境に応じた適切な動作を実現
 
 ---
 

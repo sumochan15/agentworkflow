@@ -644,17 +644,28 @@ export class VideoAgent {
             await writeFile(scenarioPath, JSON.stringify(scenario, null, 2), 'utf-8');
             console.log(`📄 シナリオを保存: ${scenarioPath}`);
 
-            // 力士名の読み仮名を事前確認（タイムアウト付き）
+            // 力士名の読み仮名を事前確認
+            // ローカル環境: 十分な時間をかけて確認、エラーがあれば停止
+            // Vercel環境: 15秒でタイムアウトしてスキップ、動画生成は継続
+            const isProduction = process.env.VERCEL || process.env.NODE_ENV === 'production';
+            const timeout = isProduction ? 15000 : 120000; // 本番15秒、ローカル2分
+
             try {
                 await Promise.race([
                     this.verifyWrestlerReadings(scenario),
                     new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error('Wrestler verification timeout')), 15000)
+                        setTimeout(() => reject(new Error('Wrestler verification timeout')), timeout)
                     )
                 ]);
             } catch (error: any) {
-                console.warn('⚠️  力士名の確認をスキップ:', error.message);
-                // 力士名の確認に失敗しても続行する（動画生成には必須ではない）
+                if (isProduction) {
+                    // 本番環境ではスキップして続行
+                    console.warn('⚠️  力士名の確認をスキップ:', error.message);
+                } else {
+                    // ローカル環境ではエラーとして扱う
+                    console.error('❌ 力士名の確認に失敗しました:', error.message);
+                    throw error;
+                }
             }
 
             // 画像生成
