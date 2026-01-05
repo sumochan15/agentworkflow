@@ -80,32 +80,39 @@ export async function POST(request: NextRequest) {
       fs.writeFileSync(bgmPath, buffer);
     }
 
-    // Start video generation in background (don't await)
-    generateVideo({
-      jobId,
-      input,
-      provider,
-      voiceId: voiceId || undefined,
-      apiKeys,
-      scenario,
-      referenceImagePath,
-      bgmPath,
-      progressEmitter,
-    }).catch(async (error) => {
+    // Return job ID immediately so client can start polling
+    // Note: We don't await generateVideo() here because Vercel serverless functions
+    // terminate after returning response. Instead, we'll have to await it.
+    // The client will poll /api/video/status for progress.
+
+    // Actually, we MUST await in Vercel to keep the function alive
+    try {
+      // Start video generation and keep function alive
+      await generateVideo({
+        jobId,
+        input,
+        provider,
+        voiceId: voiceId || undefined,
+        apiKeys,
+        scenario,
+        referenceImagePath,
+        bgmPath,
+        progressEmitter,
+      });
+
+      return NextResponse.json({ jobId, status: 'completed' });
+    } catch (error: any) {
       console.error(`Job ${jobId} failed:`, error);
       await jobManager.updateJob(jobId, {
         status: 'error',
         error: error.message || 'Video generation failed',
       });
-      progressEmitter.emitProgress({
-        step: 'complete',
+      return NextResponse.json({
+        jobId,
         status: 'error',
-        progress: 0,
-        message: error.message || 'Video generation failed',
-      });
-    });
-
-    return NextResponse.json({ jobId, status: 'pending' });
+        error: error.message
+      }, { status: 500 });
+    }
   } catch (error: any) {
     console.error('Generate API error:', error);
     return NextResponse.json(

@@ -188,10 +188,38 @@ export class VideoAgent {
         console.log(`🎨 ${scenario.scenes.length} 枚の画像を生成中 (Nano Banana Pro - 9:16 手描き風 + キャラ参照)...`);
         const imagePaths: string[] = [];
 
-        // レファレンス画像を読み込み
-        const refImagePath = this.referenceImagePath || path.join(process.cwd(), '.claude/agents/ref_image/sumo_yohei.png');
-        const refImageBuffer = fs.readFileSync(refImagePath);
-        const refImageBase64 = refImageBuffer.toString('base64');
+        // レファレンス画像を読み込み（必須）
+        let refImageBase64: string | undefined;
+
+        if (this.referenceImagePath) {
+            // ユーザー指定のレファレンス画像
+            const refImageBuffer = fs.readFileSync(this.referenceImagePath);
+            refImageBase64 = refImageBuffer.toString('base64');
+            console.log(`📷 レファレンス画像を読み込みました: ${this.referenceImagePath}`);
+        } else {
+            // デフォルトレファレンス画像（優先順位順に試行）
+            const possiblePaths = [
+                path.join(process.cwd(), 'public/ref_image/sumo_yohei.png'),  // Vercel本番環境
+                path.join(process.cwd(), '.claude/agents/ref_image/sumo_yohei.png'),  // ローカル環境
+            ];
+
+            for (const refPath of possiblePaths) {
+                if (fs.existsSync(refPath)) {
+                    try {
+                        const refImageBuffer = fs.readFileSync(refPath);
+                        refImageBase64 = refImageBuffer.toString('base64');
+                        console.log(`📷 デフォルトレファレンス画像を読み込みました: ${refPath}`);
+                        break;
+                    } catch (e) {
+                        console.warn(`⚠️  ${refPath} の読み込みに失敗:`, e instanceof Error ? e.message : e);
+                    }
+                }
+            }
+
+            if (!refImageBase64) {
+                throw new Error('レファレンス画像が見つかりません。public/ref_image/sumo_yohei.png を配置してください。');
+            }
+        }
 
         for (let i = 0; i < scenario.scenes.length; i++) {
             const scene = scenario.scenes[i];
@@ -203,21 +231,23 @@ export class VideoAgent {
                 const handDrawnPrompt = ImagePromptBuilder.buildPrompt(scene.text, i);
 
                 // Nano Banana Pro API (Gemini 3 Pro Image Preview) with reference image
+                const parts: any[] = [
+                    {
+                        text: `Using the sumo character from the reference image, ${handDrawnPrompt}`
+                    },
+                    {
+                        inline_data: {
+                            mime_type: "image/png",
+                            data: refImageBase64
+                        }
+                    }
+                ];
+
                 const response = await axios.post(
                     `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent`,
                     {
                         contents: [{
-                            parts: [
-                                {
-                                    text: `Using the sumo character from the reference image, ${handDrawnPrompt}`
-                                },
-                                {
-                                    inline_data: {
-                                        mime_type: "image/png",
-                                        data: refImageBase64
-                                    }
-                                }
-                            ]
+                            parts: parts
                         }],
                         generationConfig: {
                             responseModalities: ["IMAGE"],
@@ -646,26 +676,26 @@ export class VideoAgent {
 
             // 力士名の読み仮名を事前確認
             // ローカル環境: 十分な時間をかけて確認、エラーがあれば停止
-            // Vercel環境: 15秒でタイムアウトしてスキップ、動画生成は継続
+            // Vercel環境: 完全にスキップ（一時的なテスト）
             const isProduction = process.env.VERCEL || process.env.NODE_ENV === 'production';
-            const timeout = isProduction ? 15000 : 120000; // 本番15秒、ローカル2分
 
-            try {
-                await Promise.race([
-                    this.verifyWrestlerReadings(scenario),
-                    new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error('Wrestler verification timeout')), timeout)
-                    )
-                ]);
-            } catch (error: any) {
-                if (isProduction) {
-                    // 本番環境ではスキップして続行
-                    console.warn('⚠️  力士名の確認をスキップ:', error.message);
-                } else {
-                    // ローカル環境ではエラーとして扱う
+            if (!isProduction) {
+                // ローカル環境のみ実行
+                const timeout = 120000; // 2分
+                try {
+                    await Promise.race([
+                        this.verifyWrestlerReadings(scenario),
+                        new Promise((_, reject) =>
+                            setTimeout(() => reject(new Error('Wrestler verification timeout')), timeout)
+                        )
+                    ]);
+                } catch (error: any) {
                     console.error('❌ 力士名の確認に失敗しました:', error.message);
                     throw error;
                 }
+            } else {
+                // Vercel環境では完全にスキップ（テスト用）
+                console.warn('⚠️  Vercel環境: 力士名の確認をスキップ');
             }
 
             // 画像生成
