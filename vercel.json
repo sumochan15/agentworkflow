@@ -1,0 +1,22 @@
+{
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "regions": ["hnd1"],
+  "functions": {
+    "app/api/video/generate/route.ts": {
+      "maxDuration": 800,
+      "memory": 3008
+    },
+    "app/api/video/status/[jobId]/route.ts": {
+      "maxDuration": 800
+    },
+    "app/api/video/download/[jobId]/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/scenario/preview/route.ts": {
+      "maxDuration": 120
+    }
+  }
+}

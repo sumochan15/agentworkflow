@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Dark Mode - Professional & Elegant */
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+
+    --card: 217 33% 17%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 217 33% 17%;
+    --popover-foreground: 210 40% 98%;
+
+    /* Primary - Vibrant Blue */
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 11%;
+
+    /* Secondary - Electric Purple */
+    --secondary: 263 70% 50%;
+    --secondary-foreground: 210 40% 98%;
+
+    /* Muted - Dark Gray-Blue */
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    /* Accent - Neon Cyan */
+    --accent: 189 100% 60%;
+    --accent-foreground: 222 47% 11%;
+
+    /* Destructive - Bright Red */
+    --destructive: 0 85% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    /* Borders & Inputs */
+    --border: 217 33% 25%;
+    --input: 217 33% 20%;
+    --ring: 217 91% 60%;
+
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-muted;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-primary/30 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary/50;
+  }
+}
+
+@layer components {
+  /* Glass morphism effect - Dark Mode */
+  .glass {
+    background: rgba(30, 41, 59, 0.7);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary via-accent to-secondary;
+  }
+
+  /* Card hover effect */
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-2xl hover:shadow-primary/20 hover:-translate-y-1;
+  }
+}
